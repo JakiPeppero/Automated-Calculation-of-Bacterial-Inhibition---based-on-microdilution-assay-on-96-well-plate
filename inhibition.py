@@ -250,7 +250,7 @@ def plot_heatmap_facet(all_inhibition, base_dir): #heatmap_facet to have a tiled
         )
         
   # the following sets the labels and ticks on heatmap
-        ax.set_title(plate_name)
+        ax.set_xlabel(plate_name, labelpad=10)
         ax.set_xticks(np.arange(mat.shape[1]))
         ax.set_yticks(np.arange(mat.shape[0]))
         ax.set_xticklabels(mat.columns)
@@ -262,11 +262,11 @@ def plot_heatmap_facet(all_inhibition, base_dir): #heatmap_facet to have a tiled
         fig.delaxes(axes[j])
 
   # cbar function creates a shared colorbar for all the plates
-    cbar_ax = fig.add_axes([0.25, 0.92, 0.5, 0.02])
+    # reserve space on right for colorbar
+    fig.subplots_adjust(top=0.85)
+    cbar_ax = fig.add_axes([0.25, 0.90, 0.5, 0.02])  # top horizontal bar
     cbar = fig.colorbar(im, cax=cbar_ax, orientation="horizontal")
     cbar.set_label("% Inhibition")
-
-    plt.tight_layout()
   
   # output file
     out = os.path.join(base_dir, "FACET_heatmaps.png")
