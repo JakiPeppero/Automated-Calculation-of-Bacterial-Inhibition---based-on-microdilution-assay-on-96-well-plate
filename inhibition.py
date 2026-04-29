@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+# usage
 # usage: python inhibition.py metadata.csv plate1.csv plate2.csv plate3.csv plate4.csv H10,H11,H12 H7,H8,H9
 
 import sys
@@ -186,6 +186,7 @@ def plate_to_long(inhibition_plate):
 
 # GROUPS AND SUMMARIZE THE % INHIBITION VALUES
 #-------------------------------------------------
+#Heatmaps are very important to easily detect trends accross our plates. This identifies the active sample easily accross the samples. 
 #Note: Our % inhibition values above are computed per well. But since our setup is organized in triplicate values, we want to
 #obtain the mean % inhibition as well as the standard error to reveal the variation in our sample. This accounts for possible pipetting errors, etc.
 
@@ -214,65 +215,65 @@ def compute_summary(long_df, plate_name):
 
 def plot_heatmap_facet(all_inhibition, base_dir): #heatmap_facet to have a tiled heatmaps for all the plates analyzed
 
-    n = len(all_inhibition)
+    n = len(all_inhibition) # the values to be plotted would be the inhibition values in our plates
     cols = math.ceil(math.sqrt(n))
     rows = math.ceil(n / cols)
 
-    vmin = min(mat.values.min() for _, mat in all_inhibition)
-    vmax = max(mat.values.max() for _, mat in all_inhibition)
+    vmin = min(mat.values.min() for _, mat in all_inhibition) #sets the color scaling to the minimum values found in our calculation
+    vmax = max(mat.values.max() for _, mat in all_inhibition) #sets the color scaling for max values
 
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
     axes = np.array(axes).reshape(-1)
 
-    cmap = plt.cm.viridis
+    cmap = plt.cm.viridis #theme - viridis
 
-    for i, (plate_name, mat) in enumerate(all_inhibition):
+    for i, (plate_name, mat) in enumerate(all_inhibition): #this loops through each plate data
 
         ax = axes[i]
 
-        mat = mat.sort_index()
-        mat = mat.reindex(sorted(mat.columns), axis=1)
+        mat = mat.sort_index() #sorts our rows (a-h) so that they are not shuffled
+        mat = mat.reindex(sorted(mat.columns), axis=1) #sorts the columns (1 to 12)
 
         data = mat.values
-        masked = np.ma.masked_invalid(data)
+        masked = np.ma.masked_invalid(data) #this handles the missing/invalid values. 
+                                            #i.e. in Plate4.csv there are deliberate error values which should leave a blank on the heatmap
 
         im = ax.imshow(
             masked,
-            cmap=cmap,
+            cmap=cmap,  #colors
             vmin=vmin,
             vmax=vmax,
-            aspect="equal",
+            aspect="equal",   #square wells
             interpolation="none"
         )
-
+  # the following sets the labels and ticks on heatmap
         ax.set_title(plate_name)
-
         ax.set_xticks(np.arange(mat.shape[1]))
         ax.set_yticks(np.arange(mat.shape[0]))
-
         ax.set_xticklabels(mat.columns)
         ax.set_yticklabels(mat.index)
-
         ax.tick_params(axis="x", rotation=0, labelsize=6)
         ax.tick_params(axis="y", rotation=0, labelsize=6)
 
     for j in range(i + 1, len(axes)):
         fig.delaxes(axes[j])
 
+  # cbar function creates a shared colorbar for all the plates
     cbar_ax = fig.add_axes([0.25, 0.92, 0.5, 0.02])
     cbar = fig.colorbar(im, cax=cbar_ax, orientation="horizontal")
     cbar.set_label("% Inhibition")
 
     plt.tight_layout()
-
+  
+  # output file
     out = os.path.join(base_dir, "FACET_heatmaps.png")
-    plt.savefig(out, dpi=200, bbox_inches="tight")
+    plt.savefig(out, dpi=100, bbox_inches="tight")
     plt.close()
 
     print(f"Saved: {out}")
 
 
-# BAR PLOT
+# PLOTTING OF BAR PLOTS
 #-------------------------------------------------
 
 def plot_bars(df, base_dir):
