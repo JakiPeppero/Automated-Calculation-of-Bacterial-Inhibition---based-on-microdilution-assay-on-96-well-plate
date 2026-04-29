@@ -1,0 +1,5 @@
+plate,sample_code,error
+plate4,A2,OVERFLOW
+plate4,D6,neg_value_raw
+plate4,E8,neg_value_raw
+plate4,G1,missing_value
