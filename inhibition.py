@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# usage
-# usage: python inhibition.py metadata.csv plate1.csv plate2.csv plate3.csv plate4.csv H10,H11,H12 H7,H8,H9
+# usage: python inhibition.py <metadata.csv> <filename1> <filename2> <filename...n> <media control wells> <growth control wells>
+# usage example: python inhibition.py metadata.csv plate1.csv plate2.csv plate3.csv plate4.csv H10,H11,H12 H7,H8,H9
 
 import sys
 import os
@@ -11,8 +11,10 @@ import math
 import re
 
 
-# GLOBAL ERROR STORAGE
-ALL_ERRORS = [] #stores possible errors should the following be detected in the raw data: overflow readings, missing values, negative values
+# ERROR STORAGE
+ALL_ERRORS = [] #stores possible errors under list
+                # possible errors to be detected in  raw data: overflow readings,
+                # missing values, negative values
 
 
 # LOADING OF DATA VIA ARGUMENTS
@@ -60,9 +62,7 @@ GROWTH_CONTROL = parse_wells(growth_arg)
 
 #LOADING OF RAWDATA FILES
 #-------------------------------------------------
-#Most of this scripts in this section were made by chatgpt especially in cleanup section.
-#now we can read our csv file and transform it into dataframe 
-# DATA CLEANUP and VALIDATION -mostly by chatgpt
+
 
 def load_plate(file_path):
 
@@ -87,10 +87,10 @@ def load_plate(file_path):
 # This section checks if my raw data values are okay for processing. This reflects real-life cases where 
 # the raw data might contain possible errors. For example, the most common issues in reading plates would
 # be a sudden "OVERFLOW"  when the reader's capacity has been maxed out. Possible human error could also occur 
-# in acquiring the data such as missing, negative, or letter-based values which are deemed erroneous.
+# happen in acquiring the data such as missing, negative, or letter-based values which are deemed erroneous.
 # This section allows raw data values to be converted into a float ONLY IF our values are valid.
 #I asked chatgpt for a script to log these potential errors, AND if observed, tabulate them into error_output.csv 
-# This allows to easily trace the location of wells having errors.
+# This allows to easily trace the location of wells having errors, so that users can re-evaluate the raw files.
     
     for r in df.index:
         for c in df.columns: #Go through every column and row
@@ -115,10 +115,10 @@ def load_plate(file_path):
                 num = float(val_str.replace(',', ''))
 
                 if num < 0:                                        #This also logs negative values as error
-                    ALL_ERRORS.append({                            #Same thing but for negative values are observed, 
+                    ALL_ERRORS.append({                            #Same thing above, which logs the information about the errors for traceability 
                         "plate": plate_name,
                         "sample_code": f"{r}{c}",
-                        "error": "neg_value_raw"                   #log/append it as neg_value_raw in our error_output.csv
+                        "error": "neg_value_raw"                   #log/append the error as neg_value_raw in our error_output.csv
                     })
                     cleaned.loc[r, c] = np.nan
                     continue
@@ -145,6 +145,7 @@ def load_plate(file_path):
 # COMPUTATION OF OUR MEDIA (STERILITY) and GROWTH (negative) CONTROLS
 #-------------------------------------------------
 #Here we used the numpy to have faster math operations and to avoid extensive scripts (if loop is used)
+#First we get the mean values of the media and growth for each plate. The values are stored as numpy arrays here
 def compute_controls(plate):
     media_vals = np.array([plate.loc[r, c] for r, c in MEDIA_BLANK])
     growth_vals = np.array([plate.loc[r, c] for r, c in GROWTH_CONTROL])
@@ -155,7 +156,7 @@ def compute_controls(plate):
 
 # COMPUTES FOR % BACTERIAL INHIBITION
 #-------------------------------------------------
-#This can also be changed if other analysis will be needed (i.e. %bacterial growth proliferation which is just the inverse of the % inhibition)
+#This formula here can also be changed if other analysis will be needed (i.e. %bacterial growth proliferation which is just the inverse of the % inhibition)
 
 def compute_inhibition(plate, media_avg, growth_avg):
     values = plate.values #creates numpy values from each well the samples
@@ -165,9 +166,10 @@ def compute_inhibition(plate, media_avg, growth_avg):
 
 
 #NOTE: This % inhibition values are computed per well. Later we want to summarize them per sample 
-# as mean_inhibition with se (standard error) summarized later in combined_summary.csv
-#This output file contains the ff info: plate,sample_code,dose,mean_inhibition,se
-#This means that we have to prepare our dataset into a compatible format for merging
+# as mean_inhibition with se (standard error), which will be summarized later in the output file "combined_summary.csv" 
+#ThOur intended output file contains the ff info: plate,sample_code,dose,mean_inhibition,se
+#As you can see, some of the details included here (i.e. sample_code, dose) must be taken from the metadata.csv.
+#Hence, we have to prepare our dataset into a compatible format for merging
 
 # CONVERTING PANDAS DATAFRAME (containing Numpy array) INTO LONG TABLE FORMAT - suggested by chatgpt 
 #-------------------------------------------------
@@ -186,7 +188,6 @@ def plate_to_long(inhibition_plate):
 
 # GROUPS AND SUMMARIZE THE % INHIBITION VALUES
 #-------------------------------------------------
-#Heatmaps are very important to easily detect trends accross our plates. This identifies the active sample easily accross the samples. 
 #Note: Our % inhibition values above are computed per well. But since our setup is organized in triplicate values, we want to
 #obtain the mean % inhibition as well as the standard error to reveal the variation in our sample. This accounts for possible pipetting errors, etc.
 
@@ -209,9 +210,10 @@ def compute_summary(long_df, plate_name):
 
 # PLOTTING OF HEATMAPS - this is mostly via chatgpt since we only had like 15mins discussion about matplotlib.pyplot
 #-------------------------------------------------
+#Heatmaps are very important to easily detect trends accross our plates. This identifies the active sample easily accross the samples. 
 #At first my plan was to export my data and run the export file into Rscript using ggplot function.
 #But since it was discussed that matplotlib.pyplot can also do the same thing with ggplot, 
-#I use this package to have just 1 whole python script for everything.
+#I used matplotlib.pyplot package to have just 1 whole python script for everything.
 
 def plot_heatmap_facet(all_inhibition, base_dir): #heatmap_facet to have a tiled heatmaps for all the plates analyzed
 
@@ -246,6 +248,7 @@ def plot_heatmap_facet(all_inhibition, base_dir): #heatmap_facet to have a tiled
             aspect="equal",   #square wells
             interpolation="none"
         )
+        
   # the following sets the labels and ticks on heatmap
         ax.set_title(plate_name)
         ax.set_xticks(np.arange(mat.shape[1]))
@@ -273,14 +276,109 @@ def plot_heatmap_facet(all_inhibition, base_dir): #heatmap_facet to have a tiled
     print(f"Saved: {out}")
 
 
+# HEATMAP-but combined
+def plot_combined_heatmap(combined_summary, base_dir):
+
+    df = combined_summary.copy()
+
+    # remove controls
+    df = df[~df["sample_code"].isin(["media", "growth"])]
+
+    # combine plate + dose
+    df["plate_dose"] = df["plate"] + "_D" + df["dose"].astype(str)
+
+    # pivot
+    pivot = df.pivot(
+        index="sample_code",
+        columns="plate_dose",
+        values="mean_inhibition"
+    )
+
+    # sort rows (Y axis)
+    pivot = pivot.reindex(sorted(pivot.index, key=natural_sort_key))
+
+    # sort columns
+    pivot = pivot.reindex(
+        sorted(
+            pivot.columns,
+            key=lambda x: (x.split("_D")[0], int(x.split("_D")[1]))
+        ),
+        axis=1
+    )
+
+    data = pivot.values
+    masked = np.ma.masked_invalid(data)
+
+    # figure size (prevents overlap)
+    fig, ax = plt.subplots(
+        figsize=(max(10, len(pivot.columns) * 0.6),
+                 max(6, len(pivot.index) * 0.4))
+    )
+
+    cmap = plt.cm.viridis
+    cmap.set_bad(color="white")
+
+    im = ax.imshow(
+        masked,
+        cmap=cmap,
+        aspect="auto"
+    )
+
+    # -------------------------
+    # AXES
+    # -------------------------
+
+    ax.set_xticks(np.arange(len(pivot.columns)))
+    ax.set_yticks(np.arange(len(pivot.index)))
+
+    ax.set_xticklabels(pivot.columns, rotation=90, fontsize=7)
+    ax.set_yticklabels(pivot.index, fontsize=7)
+
+    # keep Y axis on LEFT (default, explicit for clarity)
+    ax.yaxis.tick_left()
+    ax.yaxis.set_label_position("left")
+
+    # spacing so labels don't crowd heatmap
+    ax.tick_params(axis="y", pad=8)
+
+    ax.set_title("Combined Heatmap (Mean % Inhibition)", pad=20)
+
+    # -------------------------
+    # FIX: RIGHT-SIDE COLORBAR
+    # -------------------------
+
+    # leave space on right side for colorbar
+    fig.subplots_adjust(right=0.85)
+
+    # colorbar axis on far right
+    cbar_ax = fig.add_axes([0.88, 0.2, 0.02, 0.6])  # [left, bottom, width, height]
+
+    cbar = fig.colorbar(im, cax=cbar_ax, orientation="vertical")
+    cbar.set_label("Mean % Inhibition")
+
+    # -------------------------
+    # LAYOUT
+    # -------------------------
+
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+
+    out = os.path.join(base_dir, "COMBINED_heatmap.png")
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    print(f"Saved: {out}")
+
+
+
 # PLOTTING OF BAR PLOTS
 #-------------------------------------------------
+#Same thing with the heatmap, most of the commands here were derived from chatgpt.
 
 def plot_bars(df, base_dir):
 
     df = df.copy()
 
-    COLOR_MAP = {
+    COLOR_MAP = {                       #This specifically distinguish the samples type (via dose) from the positive control
         ("media", None): "#808080",
         ("positive_control", 5): "#e41a1c",
         ("positive_control", 50): "#ff7f00",
@@ -288,62 +386,72 @@ def plot_bars(df, base_dir):
         ("sample", 50): "#4daf4a"
     }
 
+    #creates a facet layout for the bar graphs and automatically change it depending on the number of plates read
     plates = df["plate"].unique()
     cols = math.ceil(math.sqrt(len(plates)))
     rows = math.ceil(len(plates) / cols)
 
-    fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 4 * rows))
+    #creates unique subplot axes. Sometimes the % inhibition varies from negative values to high values.
+    fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 4 * rows)) 
     axes = np.array(axes).reshape(-1)
 
-    for i, plate in enumerate(plates):
+    for i, plate in enumerate(plates): #loops through our plate data
 
         ax = axes[i]
         sub = df[df["plate"] == plate]
 
+        #defines the x-axis which will be the different sample_code
         samples = sorted(sub["sample_code"].unique(), key=natural_sort_key)
+        #this creates a clustered bar graph where sample1 would have two bars representing different doses
         doses = sorted(sub["dose"].unique())
 
         x = np.arange(len(samples))
         width = 0.8 / len(doses)
 
-        for j, dose in enumerate(doses):
+        for j, dose in enumerate(doses): #then loops through our dose
 
-            dsub = sub[sub["dose"] == dose]
+            dsub = sub[sub["dose"] == dose] #so that each dose would have a set of bar graphs
 
+            #variables to be plotted
             means = []
             errors = []
             colors = []
 
-            for s in samples:
+            for s in samples: #now we loop through each sample 
 
-                row = dsub[dsub["sample_code"] == s]
+                row = dsub[dsub["sample_code"] == s] #and extract our sample_code
 
                 if len(row) > 0:
-                    means.append(row["mean_inhibition"].iloc[0])
-                    errors.append(row["se"].iloc[0])
+                    means.append(row["mean_inhibition"].iloc[0]) #if mean_inhibition exists, 
+                    errors.append(row["se"].iloc[0]) 
 
+                    #assign the following colors per sample type
                     if s == "media":
                         colors.append(COLOR_MAP[("media", None)])
                     elif s == "positive_control":
                         colors.append(COLOR_MAP[("positive_control", dose)])
                     else:
                         colors.append(COLOR_MAP[("sample", dose)])
-
+                        
+              #for missing data, it creates invisible bars (NaN)
                 else:
                     means.append(np.nan)
                     errors.append(0)
                     colors.append("black")
-
+            
+        #bar axis formatting
             ax.bar(x + j * width, means, width, yerr=errors, capsize=3, color=colors)
 
         ax.set_title(f"Plate {plate}")
         ax.set_xticks(x + width * (len(doses) / 2))
         ax.set_xticklabels(samples, rotation=90, fontsize=6)
         ax.set_ylabel("% Inhibition")
-
+    
+    #loop through the plate data and remove any empty subplots
     for j in range(i + 1, len(axes)):
         axes[j].set_visible(False)
 
+    #output parameters. You can increase resolution if needed
     out = os.path.join(base_dir, "QC_facet_bars.png")
     plt.tight_layout()
     plt.savefig(out, dpi=100, bbox_inches="tight")
@@ -364,7 +472,7 @@ all_inhibition = [] #creates list for the inhibition which contains plate_name, 
 for FILE_PATH in file_list: #go through each plate
 
     plate_name = os.path.splitext(os.path.basename(FILE_PATH))[0] #extract the plate name (i.e. /data/plate1.csv will retrieve just the plate1.csv)
-    print(f"Processing {plate_name}...") #shows the status of the data processing
+    
 
     plate = load_plate(FILE_PATH) #loads the folder path where the file is located
 
@@ -407,6 +515,7 @@ else:
 #-------------------------------------------------
 
 plot_heatmap_facet(all_inhibition, BASE_DIR)
+plot_combined_heatmap(combined_summary, BASE_DIR)
 plot_bars(combined_summary, BASE_DIR)
 
 print("Done.")
