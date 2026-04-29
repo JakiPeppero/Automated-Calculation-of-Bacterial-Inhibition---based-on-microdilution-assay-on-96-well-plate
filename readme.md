@@ -1,4 +1,4 @@
-# Automated Calculation & Visualization of % Inhibition 
+# Automated Calculation & Visualization of % Bacterial Inhibition Assay
 ## This method is applicable to 96-well plate derived raw data having triplicate samples
 
 
@@ -14,7 +14,7 @@ python inhibition.py metadata.csv plate1.csv plate2.csv plate3.csv plate4.csv H1
 
 ## FILES needed
 - [inhibition.py](https://github.com/JakiPeppero/Automated-Calculation-of-Bacterial-Inhibition---based-on-microdilution-assay-on-96-well-plate/blob/main/inhibition.py)
-- metadata.csv - example is the followingg but users can opt to add more details if needed [metadata.csv](https://github.com/JakiPeppero/Automated-Calculation-of-Bacterial-Inhibition---based-on-microdilution-assay-on-96-well-plate/blob/main/metadata.csv)
+- metadata.csv - metadata example is included but users can opt to add more columns (i.e. test pathogens) and revise some codes if needed [metadata.csv](https://github.com/JakiPeppero/Automated-Calculation-of-Bacterial-Inhibition---based-on-microdilution-assay-on-96-well-plate/blob/main/metadata.csv)
 - Rawdata - users can add as many as files as they want
   - [plate1.csv](https://github.com/JakiPeppero/Automated-Calculation-of-Bacterial-Inhibition---based-on-microdilution-assay-on-96-well-plate/blob/main/plate1.csv) 
   - [plate2.csv](https://github.com/JakiPeppero/Automated-Calculation-of-Bacterial-Inhibition---based-on-microdilution-assay-on-96-well-plate/blob/main/plate2.csv) 
@@ -29,4 +29,8 @@ python inhibition.py metadata.csv plate1.csv plate2.csv plate3.csv plate4.csv H1
 - FACET_heatmaps.png - tiled heatmap per plate, showing all % inhibition per well
 - COMBINED_heatmap.png - one heatmap summarizing all the %inhibition for all the plates having same sample_codes
 
-Note: This project aside from helping my bioassay computation, is also a part of the prerequisite of BIO_539.
+## Other potential use
+- This code can also be used to compute % bacterial growth proliferation. You just need to change the computation part in inhibition.py 
+- This is also applicable to other biological assays in 96-well format such as mammalian cell culture assays, protein quantification, etc. Few tweaks can be made to retrofit to each users prerequisite.
+
+Note: This project aside from helping my bioassay computation, is also a part of the prerequisite of BIO_539. Thanks Dr. Schwartz!
