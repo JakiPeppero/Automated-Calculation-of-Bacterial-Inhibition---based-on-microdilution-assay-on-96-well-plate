@@ -165,17 +165,17 @@ def compute_inhibition(plate, media_avg, growth_avg):
     return pd.DataFrame(inhibition, index=plate.index, columns=plate.columns)
 
 
-#NOTE: This % inhibition values are computed per well. Later we want to summarize them per sample 
+# NOTE: This % inhibition values are computed per well. Later we want to summarize them per sample 
 # as mean_inhibition with se (standard error), which will be summarized later in the output file "combined_summary.csv" 
-#ThOur intended output file contains the ff info: plate,sample_code,dose,mean_inhibition,se
-#As you can see, some of the details included here (i.e. sample_code, dose) must be taken from the metadata.csv.
-#Hence, we have to prepare our dataset into a compatible format for merging
+# Our intended output file contains the ff info: plate,sample_code,dose,mean_inhibition,se
+# As you can see, some of the details included here (i.e. sample_code, dose) must be taken from the metadata.csv.
+# Hence, we have to prepare our dataset into a compatible format for merging
 
 # CONVERTING PANDAS DATAFRAME (containing Numpy array) INTO LONG TABLE FORMAT - suggested by chatgpt 
 #-------------------------------------------------
-#This step is similar to data preparation in Rscript prior to joining metadata to our dataframe.
-#We need this step to be able to merge data from Metadata.csv later.
-#This converts numpy backed dataframe into long table format which is compatible later during the "df.merge(metadata, on=["row", "col"])
+# This step is similar to data preparation in Rscript prior to joining metadata to our dataframe.
+# We need this step to be able to merge data from Metadata.csv later.
+# This converts numpy backed dataframe into long table format which is compatible later during the "df.merge(metadata, on=["row", "col"])
 
 def plate_to_long(inhibition_plate):
     return (
@@ -276,28 +276,31 @@ def plot_heatmap_facet(all_inhibition, base_dir): #heatmap_facet to have a tiled
     print(f"Saved: {out}")
 
 
-# HEATMAP-but combined
-def plot_combined_heatmap(combined_summary, base_dir):
+# HEATMAP-but creates a single heatmap containing mean %inhibition and grouped sample_code
+# This would output a heatmap but will group similar sample_codes together. Like in the example raw files, all of the plates have same sample_codes but having different pathogen.
+# This easily determines the active hits accross different pathogens.
+
+def plot_combined_heatmap(combined_summary, base_dir): #this time, it gets the values from the combined_summary.csv where the mean_inhibition is found
 
     df = combined_summary.copy()
 
-    # remove controls
-    df = df[~df["sample_code"].isin(["media", "growth"])]
+    #dont include media and growth in the plot
+    df = df[~df["sample_code"].isin(["media", "growth"])] 
 
     # combine plate + dose
-    df["plate_dose"] = df["plate"] + "_D" + df["dose"].astype(str)
+    df["plate_dose"] = df["plate"] + "_D" + df["dose"].astype(str) 
 
-    # pivot
+    # pivot into one matrix
     pivot = df.pivot(
         index="sample_code",
         columns="plate_dose",
         values="mean_inhibition"
     )
 
-    # sort rows (Y axis)
+    # sort rows to ascending order (Y axis) to avoid 1-1, 1,10, and 1,2 to appear on the y-axis
     pivot = pivot.reindex(sorted(pivot.index, key=natural_sort_key))
 
-    # sort columns
+    # sort columns 
     pivot = pivot.reindex(
         sorted(
             pivot.columns,
@@ -307,15 +310,17 @@ def plot_combined_heatmap(combined_summary, base_dir):
     )
 
     data = pivot.values
+    
+    #show blank spaces for missing values/ NaN
     masked = np.ma.masked_invalid(data)
 
-    # figure size (prevents overlap)
+    # setting of figure size (prevents overlap)
     fig, ax = plt.subplots(
         figsize=(max(10, len(pivot.columns) * 0.6),
                  max(6, len(pivot.index) * 0.4))
     )
 
-    cmap = plt.cm.viridis
+    cmap = plt.cm.viridis #theme/ colormap
     cmap.set_bad(color="white")
 
     im = ax.imshow(
@@ -324,30 +329,24 @@ def plot_combined_heatmap(combined_summary, base_dir):
         aspect="auto"
     )
 
-    # -------------------------
-    # AXES
-    # -------------------------
 
+    # Set out the Axes
     ax.set_xticks(np.arange(len(pivot.columns)))
     ax.set_yticks(np.arange(len(pivot.index)))
 
     ax.set_xticklabels(pivot.columns, rotation=90, fontsize=7)
     ax.set_yticklabels(pivot.index, fontsize=7)
 
-    # keep Y axis on LEFT (default, explicit for clarity)
+    # eep Y axis on LEFT (default, explicit for clarity)
     ax.yaxis.tick_left()
     ax.yaxis.set_label_position("left")
 
-    # spacing so labels don't crowd heatmap
+    # djust the spacing so labels don't crowd heatmap
     ax.tick_params(axis="y", pad=8)
 
     ax.set_title("Combined Heatmap (Mean % Inhibition)", pad=20)
 
-    # -------------------------
-    # FIX: RIGHT-SIDE COLORBAR
-    # -------------------------
-
-    # leave space on right side for colorbar
+    # eave space on right side for colorbar
     fig.subplots_adjust(right=0.85)
 
     # colorbar axis on far right
@@ -356,10 +355,7 @@ def plot_combined_heatmap(combined_summary, base_dir):
     cbar = fig.colorbar(im, cax=cbar_ax, orientation="vertical")
     cbar.set_label("Mean % Inhibition")
 
-    # -------------------------
-    # LAYOUT
-    # -------------------------
-
+    # Heatmap Layout
     plt.tight_layout(rect=[0, 0, 0.85, 1])
 
     out = os.path.join(base_dir, "COMBINED_heatmap.png")
@@ -466,7 +462,7 @@ def natural_sort_key(s):
 # OUTPUT SUMMARY FILE
 #-------------------------------------------------
 
-all_summary = [] #creating list for the summary
+all_summary = [] # this contains the list for the summary per plate
 all_inhibition = [] #creates list for the inhibition which contains plate_name, inhibition_matrix
 
 for FILE_PATH in file_list: #go through each plate
@@ -476,25 +472,26 @@ for FILE_PATH in file_list: #go through each plate
 
     plate = load_plate(FILE_PATH) #loads the folder path where the file is located
 
-    media_avg, growth_avg = compute_controls(plate)
+    media_avg, growth_avg = compute_controls(plate) #then compute for the controls per plate
 
-    inhibition_plate = compute_inhibition(plate, media_avg, growth_avg)
+    inhibition_plate = compute_inhibition(plate, media_avg, growth_avg) #proceed with computing the %inhibition per well
 
-    all_inhibition.append((plate_name, inhibition_plate))
+    all_inhibition.append((plate_name, inhibition_plate)) #store the inhibition data into inhibition_plate. This will be used for heatmap
 
-    long_df = plate_to_long(inhibition_plate)
+    long_df = plate_to_long(inhibition_plate) #converts to compatible long format (i.e well a1 to row a and column 1)
 
-    summary = compute_summary(long_df, plate_name)
+    summary = compute_summary(long_df, plate_name) #now let;s merge the metadata with the compute_summary
 
-    all_summary.append(summary)
+    all_summary.append(summary) #and store it as summary
 
-BASE_DIR = os.path.dirname(file_list[0])
+BASE_DIR = os.path.dirname(file_list[0]) #setting our output directory
 
 combined_summary = pd.concat(all_summary, ignore_index=True)
 
 combined_summary.to_csv(os.path.join(BASE_DIR, "combined_summary.csv"), index=False)
 
-active_hits = combined_summary[combined_summary["mean_inhibition"] > 60]
+#This filters out samples having >60% inhibition. this is helpful to have a summarized list of samples which we can consider as active antimicrobial agent.
+active_hits = combined_summary[combined_summary["mean_inhibition"] > 60] 
 active_hits.to_csv(os.path.join(BASE_DIR, "active_hits.csv"), index=False)
 
 print("CSV files saved.")
@@ -502,18 +499,20 @@ print("CSV files saved.")
 
 # ERROR OUTPUT FILE
 #-------------------------------------------------
-
-if ALL_ERRORS:
+#this is to print out any detected errors especially in our raw data
+if ALL_ERRORS:  #if errors were detected
     error_df = pd.DataFrame(ALL_ERRORS)
-    error_df.to_csv(os.path.join(BASE_DIR, "error_output.csv"), index=False)
-    print(f" !!!!ERRORS FOUND!!! {len(ALL_ERRORS)} (saved to error_output.csv)")
+    error_df.to_csv(os.path.join(BASE_DIR, "error_output.csv"), index=False) #log them into the error_output.csv
+    print(f" !!!!ERRORS FOUND!!! {len(ALL_ERRORS)} (saved to error_output.csv)") #and caution ERRORS FOUND
 else:
-    print("No data errors found.")
+    print("No data errors found.") #otherwise, no error_output would be created.
+    
+#NOTE: Raw data plate1.csv, plate2.csv, and plate3.csv have no errors.
+# Plate4.csv has deliberate errors on it so if this will be included in the pipeline, error_output.csv should be present
 
 
 # PLOT our heatmap and bar graph
 #-------------------------------------------------
-
 plot_heatmap_facet(all_inhibition, BASE_DIR)
 plot_combined_heatmap(combined_summary, BASE_DIR)
 plot_bars(combined_summary, BASE_DIR)
