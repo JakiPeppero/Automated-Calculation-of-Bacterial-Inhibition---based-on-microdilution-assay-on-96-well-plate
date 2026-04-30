@@ -51,6 +51,7 @@ metadata["row"] = metadata["row"].str.strip() #str.strip() cleans up whitespaces
 metadata["col"] = metadata["col"].astype(int) #str.strip() cleans up whitespaces in column
 
 
+#LOADING RAW DARA
 #Converts the well location into usable string coordinates (a1,a2,a3...h12) --> [("a,1"), ("a,2"), ("a,3")]
 def parse_wells(s):
     return [(w[0], int(w[1:])) for w in s.split(",")]
@@ -82,7 +83,7 @@ def load_plate(file_path):
 
     cleaned = pd.DataFrame(index=df.index, columns=df.columns)
     
-#CLEANUP of DATAFARME
+#CLEANUP of DATAFARME and DETECTION OF ERRORS IN RAW DATA
 #-------------------------------------------------
 # This section checks if my raw data values are okay for processing. This reflects real-life cases where 
 # the raw data might contain possible errors. For example, the most common issues in reading plates would
@@ -106,26 +107,22 @@ def load_plate(file_path):
                 })
                 cleaned.loc[r, c] = np.nan
                 continue
-
             val_str = str(val).strip()
 
             #2. NUMERIC WITH COMMAS
             if re.match(r'^-?\d{1,3}(,\d{3})*(\.\d+)?$', val_str): #this detects 1,234 and replace it with 1234. 
 
                 num = float(val_str.replace(',', ''))
-
-                if num < 0:                                        #This also logs negative values as error
-                    ALL_ERRORS.append({                            #Same thing above, which logs the information about the errors for traceability 
+                if num < 0:                                 #This also logs negative values as error
+                    ALL_ERRORS.append({                     #Same thing above, which logs the information about the errors for traceability 
                         "plate": plate_name,
                         "sample_code": f"{r}{c}",
-                        "error": "neg_value_raw"                   #log/append the error as neg_value_raw in our error_output.csv
+                        "error": "neg_value_raw"             #log/append the error as neg_value_raw in our error_output.csv
                     })
                     cleaned.loc[r, c] = np.nan
                     continue
-
                 cleaned.loc[r, c] = num
                 continue
-
 
             #3. INVALID STRING (OVERFLOW, abc, etc.)
             ALL_ERRORS.append({
@@ -133,9 +130,7 @@ def load_plate(file_path):
                 "sample_code": f"{r}{c}",
                 "error": val_str
             })
-
             cleaned.loc[r, c] = np.nan #any error will be removed from calculations and will be considered NaN automatically
-
     # Final numeric conversion safety net
     cleaned = cleaned.astype(float) #cleaned dataset contains all the valid numbers stored as float
 
@@ -308,7 +303,6 @@ def plot_combined_heatmap(combined_summary, base_dir): #this time, it gets the v
         ),
         axis=1
     )
-
     data = pivot.values
     
     #show blank spaces for missing values/ NaN
@@ -319,23 +313,28 @@ def plot_combined_heatmap(combined_summary, base_dir): #this time, it gets the v
         figsize=(max(10, len(pivot.columns) * 0.6),
                  max(6, len(pivot.index) * 0.4))
     )
-
     cmap = plt.cm.viridis #theme/ colormap
     cmap.set_bad(color="white")
-
     im = ax.imshow(
         masked,
         cmap=cmap,
         aspect="auto"
     )
 
-
     # Set out the Axes
     ax.set_xticks(np.arange(len(pivot.columns)))
     ax.set_yticks(np.arange(len(pivot.index)))
-
+    ax.set_xlabel("Pathogens")
+    ax.set_ylabel("HPLC Fraction")
     ax.set_xticklabels(pivot.columns, rotation=90, fontsize=7)
     ax.set_yticklabels(pivot.index, fontsize=7)
+    ax.text(
+      0.5, -0.25,
+      "Note: Each plate represents a different pathogen.1- A. baumannii, 2- P. aeruginosa, 3- S. aureus, 4- Vibrio sp. D represents doses in ug/mL",
+      transform=ax.transAxes,
+      ha="center",
+      fontsize=8
+    )
 
     # eep Y axis on LEFT (default, explicit for clarity)
     ax.yaxis.tick_left()
@@ -343,7 +342,6 @@ def plot_combined_heatmap(combined_summary, base_dir): #this time, it gets the v
 
     # djust the spacing so labels don't crowd heatmap
     ax.tick_params(axis="y", pad=8)
-
     ax.set_title("Combined Heatmap (Mean % Inhibition)", pad=20)
 
     # eave space on right side for colorbar
@@ -351,13 +349,11 @@ def plot_combined_heatmap(combined_summary, base_dir): #this time, it gets the v
 
     # colorbar axis on far right
     cbar_ax = fig.add_axes([0.88, 0.2, 0.02, 0.6])  # [left, bottom, width, height]
-
     cbar = fig.colorbar(im, cax=cbar_ax, orientation="vertical")
     cbar.set_label("Mean % Inhibition")
 
     # Heatmap Layout
     plt.tight_layout(rect=[0, 0, 0.85, 1])
-
     out = os.path.join(base_dir, "COMBINED_heatmap.png")
     plt.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()
@@ -365,16 +361,15 @@ def plot_combined_heatmap(combined_summary, base_dir): #this time, it gets the v
     print(f"Saved: {out}")
 
 
-
 # PLOTTING OF BAR PLOTS
 #-------------------------------------------------
-#Same thing with the heatmap, most of the commands here were derived from chatgpt.
+# Same thing with the heatmap, most of the commands here were derived from chatgpt.
 
 def plot_bars(df, base_dir):
 
     df = df.copy()
 
-    COLOR_MAP = {                       #This specifically distinguish the samples type (via dose) from the positive control
+    COLOR_MAP = {  # This specifically distinguish the samples type (via dose) from the positive control
         ("media", None): "#808080",
         ("positive_control", 5): "#e41a1c",
         ("positive_control", 50): "#ff7f00",
@@ -382,79 +377,113 @@ def plot_bars(df, base_dir):
         ("sample", 50): "#4daf4a"
     }
 
-    #creates a facet layout for the bar graphs and automatically change it depending on the number of plates read
+    # IMPORT FOR LEGEND HANDLING
+    from matplotlib.patches import Patch
+
+    # creates legend elements for a single GLOBAL legend (outside plot area)
+    legend_elements = [
+        Patch(facecolor="#808080", label="Media"),
+        Patch(facecolor="#e41a1c", label="Positive Control (5)"),
+        Patch(facecolor="#ff7f00", label="Positive Control (50)"),
+        Patch(facecolor="#377eb8", label="Sample (5)"),
+        Patch(facecolor="#4daf4a", label="Sample (50)")
+    ]
+
+    # creates a facet layout for the bar graphs and automatically change it depending on the number of plates read
     plates = df["plate"].unique()
     cols = math.ceil(math.sqrt(len(plates)))
     rows = math.ceil(len(plates) / cols)
 
-    #creates unique subplot axes. Sometimes the % inhibition varies from negative values to high values.
-    fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 4 * rows)) 
+    # creates unique subplot axes. Sometimes the % inhibition varies from negative values to high values.
+    fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 4 * rows))
     axes = np.array(axes).reshape(-1)
 
-    for i, plate in enumerate(plates): #loops through our plate data
+    for i, plate in enumerate(plates):  # loops through our plate data
 
         ax = axes[i]
         sub = df[df["plate"] == plate]
 
-        #defines the x-axis which will be the different sample_code
+        # defines the x-axis which will be the different sample_code
         samples = sorted(sub["sample_code"].unique(), key=natural_sort_key)
-        #this creates a clustered bar graph where sample1 would have two bars representing different doses
+
+        # this creates a clustered bar graph where sample1 would have two bars representing different doses
         doses = sorted(sub["dose"].unique())
 
         x = np.arange(len(samples))
         width = 0.8 / len(doses)
 
-        for j, dose in enumerate(doses): #then loops through our dose
+        for j, dose in enumerate(doses):  # then loops through our dose
 
-            dsub = sub[sub["dose"] == dose] #so that each dose would have a set of bar graphs
+            dsub = sub[sub["dose"] == dose]  # so that each dose would have a set of bar graphs
 
-            #variables to be plotted
+            # variables to be plotted
             means = []
             errors = []
             colors = []
 
-            for s in samples: #now we loop through each sample 
+            for s in samples:  # now we loop through each sample
 
-                row = dsub[dsub["sample_code"] == s] #and extract our sample_code
+                row = dsub[dsub["sample_code"] == s]  # extract sample_code row
 
                 if len(row) > 0:
-                    means.append(row["mean_inhibition"].iloc[0]) #if mean_inhibition exists, 
-                    errors.append(row["se"].iloc[0]) 
+                    means.append(row["mean_inhibition"].iloc[0])
+                    errors.append(row["se"].iloc[0])
 
-                    #assign the following colors per sample type
+                    # assign colors per sample type
                     if s == "media":
                         colors.append(COLOR_MAP[("media", None)])
                     elif s == "positive_control":
                         colors.append(COLOR_MAP[("positive_control", dose)])
                     else:
                         colors.append(COLOR_MAP[("sample", dose)])
-                        
-              #for missing data, it creates invisible bars (NaN)
+
+                # for missing data, create invisible bars
                 else:
                     means.append(np.nan)
                     errors.append(0)
                     colors.append("black")
-            
-        #bar axis formatting
+
             ax.bar(x + j * width, means, width, yerr=errors, capsize=3, color=colors)
 
-        ax.set_title(f"Plate {plate}")
+        # AXIS FORMATTING
+        ax.set_title(plate)
         ax.set_xticks(x + width * (len(doses) / 2))
         ax.set_xticklabels(samples, rotation=90, fontsize=6)
+
         ax.set_ylabel("% Inhibition")
-    
-    #loop through the plate data and remove any empty subplots
+        ax.set_xlabel("Sample Code")
+
+    # remove empty subplot axes
     for j in range(i + 1, len(axes)):
         axes[j].set_visible(False)
 
-    #output parameters. You can increase resolution if needed
+    # SPACE FOR LEGEND (RIGHT SIDE)
+    fig.subplots_adjust(
+        right=0.86,   # less empty space (was 0.80)
+        wspace=0.25,  # tighter subplot spacing
+        top=0.90
+    )
+
+
+    # SINGLE GLOBAL LEGEND
+    fig.legend(
+        handles=legend_elements,
+        loc="center left",
+        bbox_to_anchor=(0.995, 0.5),
+        frameon=False,
+        fontsize=8
+    )
+
+    # output parameters. You can increase resolution if needed
     out = os.path.join(base_dir, "QC_facet_bars.png")
-    plt.tight_layout()
+
+    plt.tight_layout(rect=[0, 0, 0.86, 1])  # prevents overlap with legend
     plt.savefig(out, dpi=100, bbox_inches="tight")
     plt.close()
 
     print(f"Saved: {out}")
-    
+
+
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text for text in re.split(r'(\d+)', str(s))]
 
@@ -468,26 +497,16 @@ all_inhibition = [] #creates list for the inhibition which contains plate_name, 
 for FILE_PATH in file_list: #go through each plate
 
     plate_name = os.path.splitext(os.path.basename(FILE_PATH))[0] #extract the plate name (i.e. /data/plate1.csv will retrieve just the plate1.csv)
-    
-
     plate = load_plate(FILE_PATH) #loads the folder path where the file is located
-
     media_avg, growth_avg = compute_controls(plate) #then compute for the controls per plate
-
     inhibition_plate = compute_inhibition(plate, media_avg, growth_avg) #proceed with computing the %inhibition per well
-
     all_inhibition.append((plate_name, inhibition_plate)) #store the inhibition data into inhibition_plate. This will be used for heatmap
-
     long_df = plate_to_long(inhibition_plate) #converts to compatible long format (i.e well a1 to row a and column 1)
-
     summary = compute_summary(long_df, plate_name) #now let;s merge the metadata with the compute_summary
-
     all_summary.append(summary) #and store it as summary
 
 BASE_DIR = os.path.dirname(file_list[0]) #setting our output directory
-
 combined_summary = pd.concat(all_summary, ignore_index=True)
-
 combined_summary.to_csv(os.path.join(BASE_DIR, "combined_summary.csv"), index=False)
 
 #This filters out samples having >60% inhibition. this is helpful to have a summarized list of samples which we can consider as active antimicrobial agent.
@@ -495,7 +514,6 @@ active_hits = combined_summary[combined_summary["mean_inhibition"] > 60]
 active_hits.to_csv(os.path.join(BASE_DIR, "active_hits.csv"), index=False)
 
 print("CSV files saved.")
-
 
 # ERROR OUTPUT FILE
 #-------------------------------------------------
